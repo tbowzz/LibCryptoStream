@@ -53,11 +53,7 @@ bool Cipher::encrypt(std::vector<uint8_t> &input, std::vector<uint8_t> &output, 
 	decryptionIv.clear(); // Ensure a clean start
 	decryptionIv.resize(BLOCK_SIZE);
 
-	std::string plaintext;
-	Cipher::bytesToString(input, plaintext);
-	std::string ciphertext;
-
-	if (!generateParams())
+	if (!generateParams()) // generate the IV
 	{
 		return false;
 	}
@@ -71,18 +67,18 @@ bool Cipher::encrypt(std::vector<uint8_t> &input, std::vector<uint8_t> &output, 
 	}
 
 	// Recovered text expands upto BLOCK_SIZE
-	ciphertext.resize(plaintext.size()+BLOCK_SIZE);
-	int out_len1 = (int)ciphertext.size();
+	output.resize(input.size()+BLOCK_SIZE);
 
-	retVal = EVP_EncryptUpdate(ctx.get(), (byte*)&ciphertext[0], &out_len1, (const byte*)&plaintext[0], (int)plaintext.size());
+	int out_len1 = (int)output.size();
+	retVal = EVP_EncryptUpdate(ctx.get(), output.data(), &out_len1, input.data(), (int)input.size());
 	if (retVal != 1)
 	{
 		printf("EVP_EncryptUpdate failed\n");
 		return false;
 	}
 
-	int out_len2 = (int)ciphertext.size() - out_len1;
-	retVal = EVP_EncryptFinal_ex(ctx.get(), (byte*)&ciphertext[0]+out_len1, &out_len2);
+	int out_len2 = (int)output.size() - out_len1;
+	retVal = EVP_EncryptFinal_ex(ctx.get(), output.data() + out_len1, &out_len2);
 	if (retVal != 1)
 	{
 		printf("EVP_EncryptFinal_ex failed\n");
@@ -90,10 +86,8 @@ bool Cipher::encrypt(std::vector<uint8_t> &input, std::vector<uint8_t> &output, 
 	}
 
 	// Set cipher text size now that we know it
-	ciphertext.resize(out_len1 + out_len2);
+	output.resize(out_len1 + out_len2);
 
-	Cipher::stringToBytes(ciphertext, output);
-	
 	decryptionIv = iv_; // save IV to output vector
 
 	return true;
@@ -126,10 +120,6 @@ bool Cipher::decrypt(std::vector<uint8_t> &input, std::vector<uint8_t> &output, 
 		return false;
 	}
 
-	std::string ciphertext;
-	Cipher::bytesToString(input, ciphertext);
-	std::string decipheredText;
-
 	EVP_CIPHER_CTX_free_ptr ctx(EVP_CIPHER_CTX_new(), ::EVP_CIPHER_CTX_free);
 	int retVal = EVP_DecryptInit_ex(ctx.get(), EVP_aes_256_cbc(), NULL, key_.data(), decryptionIv.data());
 	if (retVal != 1)
@@ -139,18 +129,18 @@ bool Cipher::decrypt(std::vector<uint8_t> &input, std::vector<uint8_t> &output, 
 	}
 
 	// Recovered text contracts upto BLOCK_SIZE
-	decipheredText.resize(ciphertext.size());
-	int out_len1 = (int)decipheredText.size();
+	output.resize(input.size());
+	int out_len1 = (int)output.size();
 
-	retVal = EVP_DecryptUpdate(ctx.get(), (byte*)&decipheredText[0], &out_len1, (const byte*)&ciphertext[0], (int)ciphertext.size());
+	retVal = EVP_DecryptUpdate(ctx.get(), output.data(), &out_len1, input.data(), (int)input.size());
 	if (retVal != 1)
 	{
 		printf("EVP_DecryptUpdate failed\n");
 		return false;
 	}
 
-	int out_len2 = (int)decipheredText.size() - out_len1;
-	retVal = EVP_DecryptFinal_ex(ctx.get(), (byte*)&decipheredText[0]+out_len1, &out_len2);
+	int out_len2 = (int)output.size() - out_len1;
+	retVal = EVP_DecryptFinal_ex(ctx.get(), output.data() + out_len1, &out_len2);
 	if (retVal != 1)
 	{
 		printf("EVP_DecryptFinal_ex failed\n");
@@ -158,9 +148,7 @@ bool Cipher::decrypt(std::vector<uint8_t> &input, std::vector<uint8_t> &output, 
 	}
 
 	// Set recovered text size now that we know it
-	decipheredText.resize(out_len1 + out_len2);
-
-	Cipher::stringToBytes(decipheredText, output);
+	output.resize(out_len1 + out_len2);
 
 	return true;
 }
